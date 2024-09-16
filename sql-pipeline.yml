@@ -1,0 +1,52 @@
+pipeline:
+    build-sql:
+    stage:Build
+    script:
+        - echo "Building SQL project..."
+        - sqlpackage /build /output:$CI_PROJECT_DIR/artifacts/output.sql
+    artifacts:
+    paths:
+        -$CI_PROJECT_DIR/artifacts/output.sql
+
+    lint-sql:
+    stage:Lint
+    script:
+        - echo "Running SQL linter..."
+        - sql-linter --file $CI_PROJECT_DIR/artifacts/output.sql
+    dependencies:
+        - build-sql
+
+    test-sql-unit:
+    stage: Test unit
+    script:
+        - echo "Running SQL unit tests..."
+        - sqlcmd -S $TEST_SERVER -d $TEST_DB -U $TEST_USER -p $TEST_PASSWORD -i test-unit.sql
+    dependencies:
+        - lint-sql
+
+    test-sql-integration:
+    stage: Test integration
+    script:
+        - echo "Running SQL integration tests..."
+        - sqlcmd -S $TEST_SERVER -d $TEST_DB -U $TEST_USER -p $TEST_PASSWORD -i test-unit.sql
+    dependencies:
+        - test-sql-unit
+
+    deploy-dev:
+    stage:
+    script:
+        -echo "Deploying SQL Dev environment..."
+        -sqlpackage /deploy /output:$CI_PROJECT_DIR/artifacts/output.sql /TargetDatabaseName:$DEV_DB /TargetDatabaseName:$DEV_SERVER
+    dependencies:
+        - test-sql-integration
+
+   
+    deploy-prod:
+    stage:
+    script:
+        -echo "Deploying SQL Prod environment..."
+        -sqlpackage /deploy /output:$CI_PROJECT_DIR/artifacts/output.sql /TargetDatabaseName:PROD_DB /TargetDatabaseName:$DEV_SERVER
+    dependencies:
+        - deploy-dev
+        when: manual
+        allow_failure: false
